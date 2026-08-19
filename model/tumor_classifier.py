@@ -447,6 +447,47 @@ class MRITumorClassifier:
             else:
                 abnormal_vis = tissue_vis.copy()
 
+            # Generate Structured Clinical Answers to Required Data
+            if is_tumor:
+                loc_str = stats.get('location', 'Unilateral Hemispheric')
+                area_str = f"{stats.get('tumor_area', 0):,} px ({stats.get('area_ratio_pct', 0):.1f}% intracranial volume)"
+                edema_str = f"Present — Vasogenic edema halo ({stats.get('edema_ratio_pct', 0):.1f}% surrounding area)" if stats.get('edema_ratio_pct', 0) > 0 else "Absent / Minimal"
+                necrotic_str = f"Present — Central hypointense core ({stats.get('necrotic_ratio_pct', 0):.1f}%)" if stats.get('necrotic_ratio_pct', 0) > 0 else "Absent"
+                ring_str = f"Positive ({stats.get('ring_score_pct', 0):.1f}% peripheral enhancement)" if stats.get('ring_score_pct', 0) > 10 else "Indeterminate / Diffuse"
+                asym_str = f"Significant Mass Effect ({stats.get('asymmetry_pct', 0):.1f}% asymmetry)" if stats.get('asymmetry_pct', 0) > 10 else "Mild Asymmetry"
+                rec_str = "Immediate neuro-oncological evaluation, contrast-enhanced T1/FLAIR MRI, MR spectroscopy, and surgical biopsy assessment."
+                pathology_str = "Abnormal Intracranial Mass / Neoplastic Tissue Detected"
+            else:
+                loc_str = "Bilateral Symmetrical (Normal Anatomical Hemispheres)"
+                area_str = "0 px (0.0% — No focal lesion detected)"
+                edema_str = "Absent — No vasogenic swelling or fluid accumulation"
+                necrotic_str = "Absent — Normal homogeneous tissue density"
+                ring_str = "Negative (0.0% — Preserved cerebral margins)"
+                asym_str = f"Normal Bilateral Symmetry ({stats.get('asymmetry_pct', 0):.1f}% variance)"
+                rec_str = "No acute intracranial pathology detected. Maintain routine clinical screening as indicated."
+                pathology_str = "Healthy Normal Brain Tissue (No Tumor Detected)"
+
+            clinical_answers = {
+                'pathology_verdict': pathology_str,
+                'classification_status': 'Positive (Tumor Detected)' if is_tumor else 'Negative (Normal Brain)',
+                'model_confidence': f"{confidence:.1f}%",
+                'lesion_location': loc_str,
+                'lesion_size_and_volume': area_str,
+                'vasogenic_edema_halo': edema_str,
+                'necrotic_center_core': necrotic_str,
+                'contrast_ring_enhancement': ring_str,
+                'hemispheric_asymmetry': asym_str,
+                'clinical_recommendation': rec_str
+            }
+
+            stages_dict = {
+                'preprocessed': self._b64(enhanced),
+                'brain_mask': self._b64(brain_mask),
+                'tissue_segmentation': self._b64(tissue_vis),
+                'deep_learning_cam': self._b64(abnormal_vis),
+                'final_overlay': self._b64(overlay)
+            }
+
             pipeline_steps = [
                 {'stage': '1', 'title': 'Preprocessing (CLAHE)',  'image': self._b64(enhanced)},
                 {'stage': '2', 'title': 'Brain Segmentation',     'image': self._b64(brain_mask)},
@@ -462,9 +503,23 @@ class MRITumorClassifier:
                 'confidence': confidence,
                 'score': score,
                 'factors': factors,
+                'diagnostic_factors': factors,
                 'overlay_image': self._b64(overlay),
                 'pipeline_steps': pipeline_steps,
-                'stats': stats
+                'stages': stages_dict,
+                'stats': stats,
+                'metrics': {
+                    'brain_area_px': stats.get('brain_area', 0),
+                    'tumor_area_px': stats.get('tumor_area', 0),
+                    'area_ratio_pct': stats.get('area_ratio_pct', 0),
+                    'asymmetry_index_pct': stats.get('asymmetry_pct', 0),
+                    'contrast_ratio': stats.get('contrast_ratio', 1.0),
+                    'ring_score_pct': stats.get('ring_score_pct', 0),
+                    'edema_ratio_pct': stats.get('edema_ratio_pct', 0),
+                    'necrotic_ratio_pct': stats.get('necrotic_ratio_pct', 0),
+                    'location': loc_str
+                },
+                'clinical_answers': clinical_answers
             }
 
         except Exception as exc:

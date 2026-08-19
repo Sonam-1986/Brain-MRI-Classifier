@@ -1,5 +1,5 @@
 /* ==========================================================================
-   MRI Brain Tumor Classifier — Interactive Frontend Logic
+   MRI Brain Tumor Classifier — Multi-View SPA & Diagnostic Q&A Logic
    ========================================================================== */
 
 /* ─── State ─── */
@@ -17,9 +17,8 @@ const clearAllBtn = document.getElementById('clearAllBtn');
 const loadingOverlay = document.getElementById('loadingOverlay');
 const loadingStatusText = document.getElementById('loadingStatusText');
 const analysisProgressBar = document.getElementById('analysisProgressBar');
-const resultsContainer = document.getElementById('resultsContainer');
 const resultsCardsWrapper = document.getElementById('resultsCardsWrapper');
-const newScanBtn = document.getElementById('newScanBtn');
+const navResultsBtn = document.getElementById('navResultsBtn');
 const exportSummaryBtn = document.getElementById('exportSummaryBtn');
 
 // Modal Elements
@@ -28,24 +27,63 @@ const modalTitle = document.getElementById('modalTitle');
 const modalSubtitle = document.getElementById('modalSubtitle');
 const modalImg = document.getElementById('modalImg');
 
-/* ─── Navigation Scroll Highlighting ─── */
-window.addEventListener('scroll', () => {
-  const sections = document.querySelectorAll('section[id]');
-  const scrollY = window.pageYOffset;
+/* ─── Multi-View Page Navigation Router ─── */
+window.navigateTo = function(pageId) {
+  // Hide all page views
+  const pages = document.querySelectorAll('.page-view');
+  pages.forEach(p => {
+    p.classList.remove('active');
+    p.style.display = 'none';
+  });
 
-  sections.forEach(sec => {
-    const sectionHeight = sec.offsetHeight;
-    const sectionTop = sec.offsetTop - 120;
-    const sectionId = sec.getAttribute('id');
-    const link = document.querySelector(`.nav-links a[href="#${sectionId}"]`);
+  // Activate target page
+  const targetPage = document.getElementById(pageId);
+  if (targetPage) {
+    targetPage.style.display = 'block';
+    // Trigger transition
+    setTimeout(() => {
+      targetPage.classList.add('active');
+    }, 20);
+  }
 
-    if (link) {
-      if (scrollY > sectionTop && scrollY <= sectionTop + sectionHeight) {
-        document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-        link.classList.add('active');
-      }
+  // Update Nav Links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    if (link.dataset.page === pageId) {
+      link.classList.add('active');
+    } else {
+      link.classList.remove('active');
     }
   });
+
+  // Scroll to top of the new page cleanly
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Update URL hash
+  if (history.pushState) {
+    history.pushState(null, null, `#${pageId}`);
+  } else {
+    location.hash = `#${pageId}`;
+  }
+};
+
+// Handle Browser Back/Forward buttons and direct hash URLs
+window.addEventListener('popstate', () => {
+  const hash = location.hash.replace('#', '');
+  if (hash && document.getElementById(hash)) {
+    navigateTo(hash);
+  } else {
+    navigateTo('page-home');
+  }
+});
+
+// Initial load routing
+document.addEventListener('DOMContentLoaded', () => {
+  const hash = location.hash.replace('#', '');
+  if (hash && document.getElementById(hash)) {
+    navigateTo(hash);
+  } else {
+    navigateTo('page-home');
+  }
 });
 
 /* ─── Drag & Drop Handlers ─── */
@@ -175,7 +213,6 @@ if (analyzeBtn) {
 
     // Show Loading Overlay
     loadingOverlay.style.display = 'block';
-    resultsContainer.style.display = 'none';
     analyzeBtn.disabled = true;
 
     // Simulate animated progress steps
@@ -194,7 +231,7 @@ if (analyzeBtn) {
         loadingStatusText.textContent = steps[stepIdx].text;
         stepIdx++;
       }
-    }, 400);
+    }, 380);
 
     try {
       const response = await fetch('/analyze', {
@@ -216,7 +253,11 @@ if (analyzeBtn) {
       setTimeout(() => {
         loadingOverlay.style.display = 'none';
         analyzeBtn.disabled = false;
+
+        // Render Results & Transition to Results Page View!
         renderAnalysisResults(currentResults);
+        if (navResultsBtn) navResultsBtn.style.display = 'inline-flex';
+        navigateTo('page-results');
       }, 500);
 
     } catch (err) {
@@ -228,12 +269,11 @@ if (analyzeBtn) {
   });
 }
 
-/* ─── Render Results Cards ─── */
+/* ─── Render Results Cards with Medical Answers to Required Data ─── */
 function renderAnalysisResults(results) {
-  if (!resultsCardsWrapper || !resultsContainer) return;
+  if (!resultsCardsWrapper) return;
 
   resultsCardsWrapper.innerHTML = '';
-  resultsContainer.style.display = 'block';
 
   results.forEach((item, idx) => {
     if (!item.success) {
@@ -258,25 +298,26 @@ function renderAnalysisResults(results) {
     const verdictIcon = isTumor ? 'fa-triangle-exclamation' : 'fa-circle-check';
     const verdictTitle = isTumor ? 'Tumor Detected' : 'Normal — No Tumor Detected';
     const verdictDesc = isTumor
-      ? `AI Residual CNN and CAM localized suspicious lesion with ${item.confidence}% confidence.`
+      ? `Deep Residual CNN and Class Activation Maps (CAM) identified focal neoplastic tissue (${item.confidence}% confidence).`
       : `Bilateral cerebral symmetry preserved. No abnormal mass or vasogenic edema detected (${item.confidence}% confidence).`;
 
-    const metrics = item.metrics || {};
-    const factors = item.diagnostic_factors || [];
+    const metrics = item.metrics || item.stats || {};
+    const factors = item.diagnostic_factors || item.factors || [];
     const stages = item.stages || {};
+    const cqa = item.clinical_answers || {};
 
-    // Build 5-stage preview thumbnails
+    // 5-Stage Segmentation Thumbnails
     const stageNames = [
       { key: 'preprocessed', label: '1. Preprocessing', sub: 'Grayscale + CLAHE' },
       { key: 'brain_mask', label: '2. Brain Extraction', sub: 'Otsu Skull Stripped' },
       { key: 'tissue_segmentation', label: '3. Tissue Separation', sub: 'K-Means 5-Classes' },
-      { key: 'deep_learning_cam', label: '4. Deep Learning CAM', sub: 'ResNet Activation Map' },
+      { key: 'deep_learning_cam', label: '4. Deep Learning CAM', sub: 'ResNet Feature Map' },
       { key: 'final_overlay', label: '5. Color Overlay', sub: 'Tumor & Edema Map' }
     ];
 
     let stagesHTML = '';
     stageNames.forEach(st => {
-      const b64 = stages[st.key];
+      const b64 = stages[st.key] || (item.pipeline_steps && item.pipeline_steps.find(p => p.stage === st.label.split('.')[0])?.image);
       if (b64) {
         stagesHTML += `
           <div class="stage-card" onclick="openImageModal('${st.label}', '${st.sub}', '${b64}')">
@@ -294,37 +335,101 @@ function renderAnalysisResults(results) {
       }
     });
 
-    // Build Quantitative Metrics Table
+    // Clinical Q&A / Answers to Required Data
+    const cqaHTML = `
+      <div class="clinical-qa-panel">
+        <div class="cqa-header">
+          <div class="cqa-title-wrap">
+            <i class="fas fa-clipboard-check"></i>
+            <h3>Required Diagnostic Answers &amp; Findings</h3>
+          </div>
+          <span class="cqa-badge">${isTumor ? 'Pathology Positive' : 'Normal Tissue Baseline'}</span>
+        </div>
+
+        <div class="cqa-grid">
+          <div class="cqa-item">
+            <div class="cqa-q"><i class="fas fa-stethoscope"></i> Pathological Classification &amp; Status</div>
+            <div class="cqa-a ${isTumor ? 'highlight-red' : 'highlight-green'}">
+              ${cqa.pathology_verdict || (isTumor ? 'Abnormal Intracranial Mass Detected' : 'Healthy Normal Brain Parenchyma')}
+            </div>
+          </div>
+
+          <div class="cqa-item">
+            <div class="cqa-q"><i class="fas fa-location-crosshairs"></i> Anatomical Lesion Location</div>
+            <div class="cqa-a">
+              ${cqa.lesion_location || metrics.location || (isTumor ? 'Unilateral Hemispheric Focal Lesion' : 'Bilateral Symmetrical (Normal)')}
+            </div>
+          </div>
+
+          <div class="cqa-item">
+            <div class="cqa-q"><i class="fas fa-ruler-combined"></i> Lesion Size &amp; Intracranial Volume</div>
+            <div class="cqa-a">
+              ${cqa.lesion_size_and_volume || (isTumor ? `${(metrics.tumor_area_px || metrics.tumor_area || 0).toLocaleString()} px (${metrics.area_ratio_pct || 0}% brain area)` : '0 px (0.0% — No focal lesion detected)')}
+            </div>
+          </div>
+
+          <div class="cqa-item">
+            <div class="cqa-q"><i class="fas fa-droplet"></i> Peritumoral Vasogenic Edema Halo</div>
+            <div class="cqa-a ${isTumor && (metrics.edema_ratio_pct > 0) ? 'highlight-red' : ''}">
+              ${cqa.vasogenic_edema_halo || (isTumor && (metrics.edema_ratio_pct > 0) ? `Present — Edema halo (${metrics.edema_ratio_pct}%)` : 'Absent — No vasogenic swelling')}
+            </div>
+          </div>
+
+          <div class="cqa-item">
+            <div class="cqa-q"><i class="fas fa-circle-dot"></i> Necrotic Center &amp; Contrast Enhancement Ring</div>
+            <div class="cqa-a">
+              ${cqa.contrast_ring_enhancement || `Ring Score: ${metrics.ring_score_pct || 0}%`} | Core: ${cqa.necrotic_center_core || 'Normal density'}
+            </div>
+          </div>
+
+          <div class="cqa-item">
+            <div class="cqa-q"><i class="fas fa-scale-balanced"></i> Hemispheric Mass Effect &amp; Asymmetry</div>
+            <div class="cqa-a">
+              ${cqa.hemispheric_asymmetry || `Asymmetry Index: ${metrics.asymmetry_index_pct || metrics.asymmetry_pct || 0}%`}
+            </div>
+          </div>
+
+          <div class="cqa-item full-span">
+            <div class="cqa-q"><i class="fas fa-user-doctor"></i> Clinical Guidance &amp; Recommended Next Steps</div>
+            <div class="cqa-a" style="color:var(--text-gray-100);">
+              ${cqa.clinical_recommendation || (isTumor ? 'Immediate neuro-oncological evaluation, contrast-enhanced T1/FLAIR MRI, and MR spectroscopy.' : 'No acute intracranial pathology. Maintain routine clinical screening.')}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Quantitative Biomarkers Table
     const metricsHTML = `
       <table class="metrics-table">
         <tbody>
           <tr>
-            <td class="m-label">Classification Verdict</td>
+            <td class="m-label">Diagnostic Classification</td>
             <td class="m-val" style="color:${isTumor ? '#f87171' : '#34d399'}; font-weight:700;">${item.label}</td>
           </tr>
           <tr>
-            <td class="m-label">Model Confidence</td>
+            <td class="m-label">Neural Network Confidence</td>
             <td class="m-val">${item.confidence}%</td>
           </tr>
           <tr>
             <td class="m-label">Brain Parenchyma Area</td>
-            <td class="m-val">${(metrics.brain_area_px || 0).toLocaleString()} px</td>
+            <td class="m-val">${(metrics.brain_area_px || metrics.brain_area || 0).toLocaleString()} px</td>
           </tr>
           <tr>
             <td class="m-label">Suspicious Lesion Area</td>
-            <td class="m-val">${(metrics.tumor_area_px || 0).toLocaleString()} px</td>
+            <td class="m-val">${(metrics.tumor_area_px || metrics.tumor_area || 0).toLocaleString()} px</td>
           </tr>
           <tr>
-            <td class="m-label">Lesion / Brain Ratio</td>
+            <td class="m-label">Lesion / Brain Volume Ratio</td>
             <td class="m-val">${metrics.area_ratio_pct || 0}%</td>
           </tr>
           <tr>
             <td class="m-label">Hemispheric Asymmetry Index</td>
-            <td class="m-val">${metrics.asymmetry_index_pct || 0}%</td>
+            <td class="m-val">${metrics.asymmetry_index_pct || metrics.asymmetry_pct || 0}%</td>
           </tr>
           <tr>
             <td class="m-label">Contrast Ratio</td>
-            <td class="m-val">${metrics.contrast_ratio || 0}</td>
+            <td class="m-val">${metrics.contrast_ratio || 1.0}</td>
           </tr>
           <tr>
             <td class="m-label">Ring Enhancement Score</td>
@@ -334,7 +439,7 @@ function renderAnalysisResults(results) {
       </table>
     `;
 
-    // Build Diagnostic Factors
+    // Diagnostic Factors List
     let factorsHTML = '';
     factors.forEach(f => {
       factorsHTML += `
@@ -371,10 +476,13 @@ function renderAnalysisResults(results) {
         </div>
       </div>
 
+      <!-- Required Answers to Clinical Data Panel -->
+      ${cqaHTML}
+
       <!-- 5-Stage Segmentation Pipeline Thumbnails -->
-      <h4 style="font-size:0.92rem; font-weight:700; color:#fff; margin-bottom:12px;">
-        <i class="fas fa-layer-group" style="color:var(--purple-light); margin-right:6px;"></i> 5-Stage Segmentation Pipeline
-      </h4>
+      <div class="section-subheading">
+        <i class="fas fa-layer-group"></i> 5-Stage Visual Image Segmentation Pipeline
+      </div>
       <div class="stages-view-grid">
         ${stagesHTML}
       </div>
@@ -386,7 +494,7 @@ function renderAnalysisResults(results) {
           ${metricsHTML}
         </div>
         <div class="biomarkers-card">
-          <h4><i class="fas fa-stethoscope"></i> Clinical Insights &amp; Findings</h4>
+          <h4><i class="fas fa-microscope"></i> Pathology Factors &amp; Observations</h4>
           <div class="factors-list">
             ${factorsHTML || '<p style="color:var(--text-gray-400); font-size:0.82rem;">No abnormal pathological factors detected.</p>'}
           </div>
@@ -396,9 +504,6 @@ function renderAnalysisResults(results) {
 
     resultsCardsWrapper.appendChild(card);
   });
-
-  // Smooth scroll to results
-  resultsContainer.scrollIntoView({ behavior: 'smooth' });
 }
 
 /* ─── Modal Inspection ─── */
@@ -416,40 +521,32 @@ window.closeImageModal = function() {
   modalImg.src = '';
 };
 
-// Close modal on Escape key
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeImageModal();
 });
 
-/* ─── Results Action Buttons ─── */
-if (newScanBtn) {
-  newScanBtn.addEventListener('click', () => {
-    selectedFiles = [];
-    renderPreviewQueue();
-    resultsContainer.style.display = 'none';
-    const workspace = document.getElementById('analyze-workspace');
-    if (workspace) workspace.scrollIntoView({ behavior: 'smooth' });
-  });
-}
-
+/* ─── Export Report ─── */
 if (exportSummaryBtn) {
   exportSummaryBtn.addEventListener('click', () => {
     if (currentResults.length === 0) {
-      alert('No results available to export.');
+      alert('No analysis results available to export.');
       return;
     }
 
     const reportData = {
-      timestamp: new Date().toISOString(),
-      system: 'MRI Brain Tumor Classifier & 5-Stage Segmentation',
+      report_timestamp: new Date().toISOString(),
+      clinical_system: 'MRI Brain Tumor Classifier & 5-Stage Segmentation Suite',
+      model_architecture: 'Deep Residual CNN (ResBlock x 4) + CAM + Morphological OpenCV',
       total_scans_analyzed: currentResults.length,
-      scans: currentResults.map(r => ({
+      scans: currentResults.map((r, i) => ({
+        scan_number: i + 1,
         filename: r.filename,
-        verdict: r.label,
-        is_tumor: r.is_tumor,
-        confidence_pct: r.confidence,
-        metrics: r.metrics,
-        findings: r.diagnostic_factors
+        classification_verdict: r.label,
+        is_tumor_detected: r.is_tumor,
+        model_confidence_pct: r.confidence,
+        clinical_answers: r.clinical_answers,
+        quantitative_biomarkers: r.metrics || r.stats,
+        pathology_observations: r.diagnostic_factors || r.factors
       }))
     };
 
@@ -457,7 +554,7 @@ if (exportSummaryBtn) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `MRI_Brain_Analysis_Report_${Date.now()}.json`;
+    a.download = `Clinical_MRI_Analysis_Report_${Date.now()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
