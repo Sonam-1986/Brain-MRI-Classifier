@@ -170,7 +170,7 @@ class MRITumorClassifier:
 
         gray = cv2.resize(gray, (256, 256))
         enhanced = self.clahe.apply(gray)
-        denoised = cv2.fastNlMeansDenoising(enhanced, h=7, templateWindowSize=7, searchWindowSize=21)
+        denoised = cv2.bilateralFilter(enhanced, d=5, sigmaColor=25, sigmaSpace=25)
         blurred = cv2.GaussianBlur(denoised, (3, 3), 0)
         return gray, enhanced, blurred
 
@@ -213,8 +213,8 @@ class MRITumorClassifier:
         if len(pixels) < k:
             return np.zeros_like(skull_stripped), np.zeros(k)
 
-        crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
-        _, flat_lbl, centers = cv2.kmeans(pixels, k, None, crit, 10, cv2.KMEANS_PP_CENTERS)
+        crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 15, 0.5)
+        _, flat_lbl, centers = cv2.kmeans(pixels, k, None, crit, 2, cv2.KMEANS_PP_CENTERS)
         order = np.argsort(centers[:, 0])
         remap = np.zeros(k, dtype=np.uint8)
         for new_i, old_i in enumerate(order):

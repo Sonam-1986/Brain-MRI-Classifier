@@ -215,30 +215,42 @@ if (analyzeBtn) {
     loadingOverlay.style.display = 'block';
     analyzeBtn.disabled = true;
 
-    // Simulate animated progress steps
+    // Animated progress steps (loop-friendly for Render cold start)
     const steps = [
-      { pct: 20, text: 'Stage 1: Grayscale conversion, CLAHE & Denoising...' },
+      { pct: 15, text: 'Waking up server — please wait (first request may take ~30s on Render)...' },
+      { pct: 25, text: 'Stage 1: Grayscale conversion, CLAHE & Denoising...' },
       { pct: 45, text: 'Stage 2: Otsu optimal skull stripping & Brain mask...' },
-      { pct: 65, text: 'Stage 3: K-Means 5-cluster tissue separation...' },
-      { pct: 85, text: 'Stage 4: Deep Residual CNN inference & CAM localization...' },
-      { pct: 98, text: 'Stage 5: Multi-layer tumor overlay & Biomarker computation...' }
+      { pct: 62, text: 'Stage 3: K-Means 5-cluster tissue separation...' },
+      { pct: 80, text: 'Stage 4: Deep Residual CNN inference & CAM localization...' },
+      { pct: 95, text: 'Stage 5: Multi-layer tumor overlay & Biomarker computation...' }
     ];
 
     let stepIdx = 0;
+    // Loop the last step if server is still processing (Render cold-start)
     const progressInterval = setInterval(() => {
-      if (stepIdx < steps.length) {
+      if (stepIdx < steps.length - 1) {
         analysisProgressBar.style.width = steps[stepIdx].pct + '%';
         loadingStatusText.textContent = steps[stepIdx].text;
         stepIdx++;
+      } else {
+        // Keep pulsing the last step so user knows it's still working
+        loadingStatusText.textContent = steps[steps.length - 1].text;
+        analysisProgressBar.style.width = '95%';
       }
-    }, 380);
+    }, 1800);
+
+    // 3-minute timeout via AbortController (handles Render cold starts)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000);
 
     try {
       const response = await fetch('/analyze', {
         method: 'POST',
-        body: formData
+        body: formData,
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
       clearInterval(progressInterval);
       analysisProgressBar.style.width = '100%';
 
@@ -261,10 +273,15 @@ if (analyzeBtn) {
       }, 500);
 
     } catch (err) {
+      clearTimeout(timeoutId);
       clearInterval(progressInterval);
       loadingOverlay.style.display = 'none';
       analyzeBtn.disabled = false;
-      alert(`Analysis Failed: ${err.message}`);
+      if (err.name === 'AbortError') {
+        alert('Request timed out after 3 minutes. The Render free server may be under load — please try again.');
+      } else {
+        alert(`Analysis Failed: ${err.message}`);
+      }
     }
   });
 }
