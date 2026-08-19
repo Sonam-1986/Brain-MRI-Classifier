@@ -25,6 +25,37 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/health')
+def health():
+    """Health check - confirms server and model are alive."""
+    model_loaded = classifier.model is not None
+    return jsonify({
+        'status': 'ok',
+        'model_loaded': model_loaded,
+        'server': 'MRI Brain Tumor Analyzer'
+    })
+
+
+@app.route('/test')
+def test_analyze():
+    """Quick self-test using a dummy image to verify the pipeline works."""
+    try:
+        import numpy as np
+        from PIL import Image
+        import io
+        # Create a 256x256 synthetic brain-like image
+        img = np.zeros((256, 256, 3), dtype=np.uint8)
+        img[60:200, 60:200] = 180  # simulate brain region
+        pil = Image.fromarray(img)
+        buf = io.BytesIO()
+        pil.save(buf, format='JPEG')
+        result = classifier.analyze(buf.getvalue())
+        return jsonify({'test': 'ok', 'success': result.get('success'), 'label': result.get('label'), 'error': result.get('error')})
+    except Exception as e:
+        import traceback
+        return jsonify({'test': 'failed', 'error': str(e), 'trace': traceback.format_exc()})
+
+
 @app.route('/analyze', methods=['POST'])
 def analyze():
     if 'files' not in request.files:

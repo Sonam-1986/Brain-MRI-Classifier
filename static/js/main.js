@@ -255,12 +255,17 @@ if (analyzeBtn) {
       analysisProgressBar.style.width = '100%';
 
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Server error occurred during analysis.');
+        let errMsg = 'Server error occurred during analysis.';
+        try { const errData = await response.json(); errMsg = errData.error || errMsg; } catch (_) {}
+        throw new Error(errMsg);
       }
 
       const data = await response.json();
       currentResults = data.results || [];
+
+      if (currentResults.length === 0) {
+        throw new Error('No results returned from server. The server may be out of memory — please try again.');
+      }
 
       setTimeout(() => {
         loadingOverlay.style.display = 'none';
