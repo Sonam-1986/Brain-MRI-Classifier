@@ -455,7 +455,8 @@ class MRITumorClassifier:
             # Generate Structured Clinical Answers to Required Data
             if is_tumor:
                 loc_str = stats.get('location', 'Unilateral Hemispheric')
-                area_str = f"{stats.get('tumor_area', 0):,} px ({stats.get('area_ratio_pct', 0):.1f}% intracranial volume)"
+                t_px = stats.get('tumor_area_px', stats.get('tumor_area', 0))
+                area_str = f"{t_px:,} px ({stats.get('area_ratio_pct', 0):.1f}% intracranial volume)"
                 edema_str = f"Present — Vasogenic edema halo ({stats.get('edema_ratio_pct', 0):.1f}% surrounding area)" if stats.get('edema_ratio_pct', 0) > 0 else "Absent / Minimal"
                 necrotic_str = f"Present — Central hypointense core ({stats.get('necrotic_ratio_pct', 0):.1f}%)" if stats.get('necrotic_ratio_pct', 0) > 0 else "Absent"
                 ring_str = f"Positive ({stats.get('ring_score_pct', 0):.1f}% peripheral enhancement)" if stats.get('ring_score_pct', 0) > 10 else "Indeterminate / Diffuse"
