@@ -1,0 +1,217 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MRI Brain Analyzer</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+<div class="app-layout">
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon"><i class="fas fa-brain"></i></div>
+      <div class="brand-text">
+        <span class="brand-title">MRI Brain<br>Analyzer</span>
+        <span class="brand-subtitle">AI Powered Segmentation<br>&amp; Classification</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-item active" data-section="dashboard" href="#"><i class="fas fa-home"></i><span>Dashboard</span></a>
+      <a class="nav-item" data-section="upload"    href="#"><i class="fas fa-cloud-upload-alt"></i><span>Upload Scans</span></a>
+      <a class="nav-item" data-section="results"   href="#"><i class="fas fa-chart-bar"></i><span>Results</span></a>
+      <a class="nav-item" data-section="about"     href="#"><i class="fas fa-info-circle"></i><span>About</span></a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="security-card">
+        <i class="fas fa-shield-alt security-icon"></i>
+        <div>
+          <p class="security-title">Secure &amp; Private</p>
+          <p class="security-desc">Your data is safe with us. All uploads are encrypted.</p>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <main class="main-content">
+
+    <!-- =========================================================
+         SECTION: Dashboard / Upload
+    ========================================================== -->
+    <div class="section active" id="section-dashboard">
+
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="header-left">
+          <div class="header-icon"><i class="fas fa-brain"></i></div>
+          <div class="header-text">
+            <h1>MRI Scan Analysis</h1>
+            <p>Upload up to 4 MRI scan images to detect and classify tumor presence using advanced image segmentation.</p>
+          </div>
+        </div>
+        <div class="model-badge"><i class="fas fa-shield-alt"></i> AI Model: U-Net</div>
+      </div>
+
+      <!-- Upload Card -->
+      <div class="card upload-card">
+        <div class="card-section-header">
+          <span class="section-bar"></span><span>Upload MRI Scans</span>
+        </div>
+        <p class="card-subtitle">You can upload up to 4 MRI scan images (JPG, PNG)</p>
+
+        <div class="drop-zone" id="dropZone">
+          <div class="dz-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+          <p class="dz-text">Drag &amp; drop your MRI scan images here</p>
+          <span class="dz-or">or</span>
+          <button class="btn-choose" id="chooseBtn" onclick="document.getElementById('fileInput').click()">
+            <i class="fas fa-paperclip"></i> Choose Files
+          </button>
+          <input type="file" id="fileInput" accept=".jpg,.jpeg,.png" multiple style="display:none" />
+        </div>
+
+        <div class="file-info-bar">
+          <span><i class="fas fa-images"></i> Up to <strong>4</strong> files can be uploaded</span>
+          <span class="fi-divider"></span>
+          <span><i class="fas fa-file-image"></i> Formats: JPG, PNG</span>
+          <span class="fi-divider"></span>
+          <span><i class="fas fa-weight-hanging"></i> Max size: 10MB per file</span>
+        </div>
+      </div>
+
+      <!-- Preview Grid -->
+      <div class="preview-grid" id="previewGrid" style="display:none"></div>
+
+      <!-- Analyze Button -->
+      <div class="analyze-section" id="analyzeSection" style="display:none">
+        <button class="btn-analyze" id="analyzeBtn">
+          <i class="fas fa-microscope"></i> Analyze MRI Scans
+        </button>
+      </div>
+
+      <!-- How It Works Card -->
+      <div class="card how-card">
+        <h3 class="card-title"><i class="fas fa-sparkles" style="color:var(--accent);"></i> How It Works</h3>
+        <div class="steps-row">
+          <div class="step">
+            <div class="step-icon step-icon-purple"><i class="fas fa-cloud-upload-alt"></i></div>
+            <div class="step-num">1</div>
+            <h4>Upload Scans</h4>
+            <p>Upload up to 4 MRI scan images.</p>
+          </div>
+          <div class="step-connector"><span></span><span></span><span></span></div>
+          <div class="step">
+            <div class="step-icon step-icon-indigo"><i class="fas fa-brain"></i></div>
+            <div class="step-num">2</div>
+            <h4>AI Segmentation</h4>
+            <p>Our AI model segments and analyzes the scans.</p>
+          </div>
+          <div class="step-connector"><span></span><span></span><span></span></div>
+          <div class="step">
+            <div class="step-icon step-icon-green"><i class="fas fa-clipboard-check"></i></div>
+            <div class="step-num">3</div>
+            <h4>Get Results</h4>
+            <p>View classification results with confidence scores.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Privacy Card -->
+      <div class="card privacy-card">
+        <div class="privacy-left">
+          <div class="privacy-icon"><i class="fas fa-shield-alt"></i></div>
+          <div>
+            <h4>Your Privacy Matters</h4>
+            <p>All uploaded images are processed securely and are not stored after analysis.</p>
+          </div>
+        </div>
+        <div class="privacy-right">
+          <i class="fas fa-lock"></i>
+          <i class="fas fa-check-circle"></i>
+        </div>
+      </div>
+    </div><!-- /section-dashboard -->
+
+    <!-- =========================================================
+         SECTION: Results
+    ========================================================== -->
+    <div class="section" id="section-results" style="display:none">
+      <div class="page-header">
+        <div class="header-left">
+          <div class="header-icon results-icon"><i class="fas fa-chart-bar"></i></div>
+          <div class="header-text">
+            <h1>Analysis Results</h1>
+            <p>Segmentation and classification results for your MRI scans.</p>
+          </div>
+        </div>
+        <button class="btn-back" id="backBtn"><i class="fas fa-arrow-left"></i> Back</button>
+      </div>
+
+      <div id="resultsContainer"></div>
+
+      <div class="disclaimer-card">
+        <i class="fas fa-triangle-exclamation"></i>
+        <p><strong>Disclaimer:</strong> This tool is for educational and research purposes only.
+           Results must not be used for clinical diagnosis. Consult a qualified medical professional.</p>
+      </div>
+    </div><!-- /section-results -->
+
+    <!-- =========================================================
+         SECTION: About
+    ========================================================== -->
+    <div class="section" id="section-about" style="display:none">
+      <div class="page-header">
+        <div class="header-left">
+          <div class="header-icon about-icon"><i class="fas fa-info-circle"></i></div>
+          <div class="header-text">
+            <h1>About</h1>
+            <p>MRI Brain Tumor Segmentation &amp; Classification System</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">6-Stage CV Pipeline</h3>
+        <div class="pipeline-about">
+          <div class="pa-step"><div class="pa-num">1</div><div class="pa-body"><h4>Preprocessing</h4><p>Grayscale conversion, CLAHE contrast enhancement, Gaussian blur noise reduction.</p></div></div>
+          <div class="pa-step"><div class="pa-num">2</div><div class="pa-body"><h4>Segmentation</h4><p>Otsu adaptive thresholding, morphological operations (close/open/dilate) for clean binary brain mask.</p></div></div>
+          <div class="pa-step"><div class="pa-num">3</div><div class="pa-body"><h4>Tissue / Region Separation</h4><p>Connected components labeling, skull stripping via flood fill, brain tissue isolation.</p></div></div>
+          <div class="pa-step"><div class="pa-num">4</div><div class="pa-body"><h4>Abnormal Region Detection</h4><p>Hyperintensity detection (mean + 1.5σ), hemispheric asymmetry scoring, statistical outlier detection.</p></div></div>
+          <div class="pa-step"><div class="pa-num">5</div><div class="pa-body"><h4>Tumor Region Extraction</h4><p>Contour detection, convex hull analysis, circularity &amp; solidity features, bounding-box extraction.</p></div></div>
+          <div class="pa-step"><div class="pa-num">6</div><div class="pa-body"><h4>Classification</h4><p>Multi-feature weighted scoring (area ratio, intensity contrast, asymmetry, morphology) → Tumor/Normal + confidence score.</p></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">Tech Stack</h3>
+        <div class="tech-grid">
+          <div class="tech-badge"><i class="fab fa-python"></i> Python 3</div>
+          <div class="tech-badge"><i class="fas fa-server"></i> Flask</div>
+          <div class="tech-badge"><i class="fas fa-eye"></i> OpenCV</div>
+          <div class="tech-badge"><i class="fas fa-calculator"></i> NumPy</div>
+          <div class="tech-badge"><i class="fas fa-image"></i> Pillow</div>
+          <div class="tech-badge"><i class="fas fa-microscope"></i> scikit-image</div>
+        </div>
+      </div>
+    </div><!-- /section-about -->
+
+    <!-- ===== LOADING OVERLAY ===== -->
+    <div class="loading-overlay" id="loadingOverlay" style="display:none">
+      <div class="loading-card">
+        <div class="spinner"></div>
+        <p>Analyzing MRI Scans&hellip;</p>
+        <small>Running 6-stage segmentation pipeline</small>
+      </div>
+    </div>
+
+  </main><!-- /main-content -->
+</div><!-- /app-layout -->
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

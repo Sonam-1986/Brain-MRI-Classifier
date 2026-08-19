@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.env/
+
+# Dataset (too large for GitHub, ~91MB zip + folder)
+dataset/
+dataset.zip
+
+# Uploaded user files (runtime only)
+uploads/
+
+# Training scripts (not needed for serving)
+train_model.py
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
