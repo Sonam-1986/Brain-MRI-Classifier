@@ -66,6 +66,11 @@ if __name__ == '__main__':
     host = '0.0.0.0'
     print("=" * 55)
     print("  MRI Brain Tumor Analyzer")
-    print(f"  Open: http://{host}:{port}")
+    print(f"  Open: http://127.0.0.1:{port}")
     print("=" * 55)
-    app.run(debug=False, host=host, port=port)
+    try:
+        app.run(debug=False, host=host, port=port)
+    except OSError:
+        fallback_port = 5050
+        print(f"Port {port} busy, switching to http://127.0.0.1:{fallback_port}")
+        app.run(debug=False, host=host, port=fallback_port)
