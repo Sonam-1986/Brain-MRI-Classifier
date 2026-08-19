@@ -62,15 +62,10 @@ def analyze():
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5001))
     host = '0.0.0.0'
     print("=" * 55)
     print("  MRI Brain Tumor Analyzer")
     print(f"  Open: http://127.0.0.1:{port}")
     print("=" * 55)
-    try:
-        app.run(debug=False, host=host, port=port)
-    except OSError:
-        fallback_port = 5050
-        print(f"Port {port} busy, switching to http://127.0.0.1:{fallback_port}")
-        app.run(debug=False, host=host, port=fallback_port)
+    app.run(debug=False, host=host, port=port)
