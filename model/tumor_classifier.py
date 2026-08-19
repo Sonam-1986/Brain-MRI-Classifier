@@ -514,10 +514,10 @@ class MRITumorClassifier:
                 'stages': stages_dict,
                 'stats': stats,
                 'metrics': {
-                    'brain_area_px': stats.get('brain_area', 0),
-                    'tumor_area_px': stats.get('tumor_area', 0),
+                    'brain_area_px': stats.get('brain_area_px', int(brain_area)),
+                    'tumor_area_px': stats.get('tumor_area_px', int(stats.get('tumor_area', 0))),
                     'area_ratio_pct': stats.get('area_ratio_pct', 0),
-                    'asymmetry_index_pct': stats.get('asymmetry_pct', 0),
+                    'asymmetry_index_pct': stats.get('asymmetry_index_pct', stats.get('asymmetry_pct', 0)),
                     'contrast_ratio': stats.get('contrast_ratio', 1.0),
                     'ring_score_pct': stats.get('ring_score_pct', 0),
                     'edema_ratio_pct': stats.get('edema_ratio_pct', 0),
