@@ -303,16 +303,21 @@ class MRITumorClassifier:
         ri = float(np.mean(enhanced[:, mid:][rm > 0])) if ra > 0 else 0.0
         int_asym = abs(li - ri) / (max(li, ri) + 1e-6)
         asym_score = area_asym * 0.4 + int_asym * 0.6
-
+        tumor_px = int(largest_area) if is_tumor else 0
         stats = {
+            'brain_area': int(brain_area),
             'brain_area_px': int(brain_area),
+            'tumor_area': tumor_px,
+            'tumor_area_px': tumor_px,
             'suspicious_regions': len(valid_regions) if is_tumor else 0,
             'area_ratio_pct': round((largest_area / (brain_area + 1e-6)) * 100.0, 2) if is_tumor else 0.0,
             'asymmetry_pct': round(asym_score * 100.0, 1),
+            'asymmetry_index_pct': round(asym_score * 100.0, 1),
             'intensity_ratio': round((float(np.mean(enhanced[hi > 0])) / (m + 1e-6)), 2) if np.any(hi > 0) else 1.0,
+            'contrast_ratio': round((float(np.mean(enhanced[hi > 0])) / (m + 1e-6)), 2) if np.any(hi > 0) else 1.0,
             'ring_score_pct': round(ring_score * 100.0, 1),
             'edema_ratio_pct': round((float(np.sum(edema > 0)) / (brain_area + 1e-6)) * 100.0, 1) if is_tumor else 0.0,
-            'necrosis_ratio_pct': round((float(np.sum(necrotic > 0)) / (largest_area + 1e-6)) * 100.0, 1) if is_tumor else 0.0,
+            'necrotic_ratio_pct': round((float(np.sum(necrotic > 0)) / (largest_area + 1e-6)) * 100.0, 1) if is_tumor else 0.0,
             'border_irregularity': round(largest_irreg, 2) if is_tumor else 0.0
         }
 
