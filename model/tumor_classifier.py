@@ -371,13 +371,15 @@ class MRITumorClassifier:
                 vis[tissue_map == lbl] = col
         return vis
 
-    def _b64(self, img):
+    def _b64(self, img, quality=75):
         if img is None:
-            img = np.zeros((256, 256, 3), np.uint8)
+            img = np.zeros((128, 128, 3), np.uint8)
         if len(img.shape) == 2:
             img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        _, buf = cv2.imencode('.png', img)
-        return 'data:image/png;base64,' + base64.b64encode(buf).decode()
+        # Resize to 128x128 for stage thumbnails to save memory/bandwidth
+        img = cv2.resize(img, (128, 128), interpolation=cv2.INTER_AREA)
+        _, buf = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        return 'data:image/jpeg;base64,' + base64.b64encode(buf).decode()
 
     # ----------------------------------------------------------------
     # Public API
@@ -494,13 +496,22 @@ class MRITumorClassifier:
                 'final_overlay': self._b64(overlay)
             }
 
+            # Encode main overlay at higher quality for the result view
+            overlay_b64 = self._b64(overlay, quality=85)
+
             pipeline_steps = [
                 {'stage': '1', 'title': 'Preprocessing (CLAHE)',  'image': self._b64(enhanced)},
                 {'stage': '2', 'title': 'Brain Segmentation',     'image': self._b64(brain_mask)},
                 {'stage': '3', 'title': 'Tissue Classification',  'image': self._b64(tissue_vis)},
                 {'stage': '4', 'title': 'Abnormal Region Detect', 'image': self._b64(abnormal_vis)},
-                {'stage': '5', 'title': 'Segmentation Overlay',   'image': self._b64(overlay)},
+                {'stage': '5', 'title': 'Segmentation Overlay',   'image': overlay_b64},
             ]
+
+            # Free large arrays from memory before building response
+            import gc
+            del enhanced, blurred, brain_mask, skull_stripped
+            del tissue_vis, abnormal_vis, hi_mask, edema_mask, ring_mask, necrotic_mask
+            gc.collect()
 
             return {
                 'success': True,
@@ -510,7 +521,7 @@ class MRITumorClassifier:
                 'score': score,
                 'factors': factors,
                 'diagnostic_factors': factors,
-                'overlay_image': self._b64(overlay),
+                'overlay_image': overlay_b64,
                 'pipeline_steps': pipeline_steps,
                 'stages': stages_dict,
                 'stats': stats,
