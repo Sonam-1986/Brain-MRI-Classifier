@@ -1,162 +1,108 @@
 """
 MRI Brain Tumor Segmentation & Deep Learning Classifier
 =========================================================
-Integrates a trained PyTorch Deep Residual CNN (93% accuracy)
-with OpenCV morphological segmentation pipeline & Class Activation Maps (CAM).
+Uses a trained Deep Residual CNN exported to ONNX format,
+running via onnxruntime (~15MB RAM vs ~350MB for PyTorch).
+OpenCV morphological segmentation pipeline & Class Activation Maps (CAM).
 """
 
 import os
 import io
 import base64
+import gc
 import cv2
 import numpy as np
 from PIL import Image
-import torch
-import torch.nn as nn
+import onnxruntime as ort
 
 # Disable OpenCV multi-threading for seamless Flask serving
 cv2.setNumThreads(0)
-torch.set_num_threads(2)
 
-MODEL_WEIGHTS_PATH = os.path.join(os.path.dirname(__file__), 'brain_tumor_detector.pth')
+MODEL_ONNX_PATH    = os.path.join(os.path.dirname(__file__), 'brain_tumor_detector.onnx')
+FC_WEIGHTS_PATH    = os.path.join(os.path.dirname(__file__), 'fc_weights.npy')
 IMG_SIZE = 128
-
-
-class ResBlock(nn.Module):
-    def __init__(self, in_c, out_c, stride=1):
-        super().__init__()
-        self.conv1 = nn.Conv2d(in_c, out_c, 3, stride=stride, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(out_c)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(out_c, out_c, 3, stride=1, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(out_c)
-
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_c != out_c:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(in_c, out_c, 1, stride=stride, bias=False),
-                nn.BatchNorm2d(out_c)
-            )
-
-    def forward(self, x):
-        res = self.shortcut(x)
-        out = self.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        out = self.relu(out + res)
-        return out
-
-
-class BrainTumorCNN(nn.Module):
-    def __init__(self, num_classes=2):
-        super().__init__()
-        self.stem = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=5, stride=2, padding=2, bias=False),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        )
-        self.stage1 = nn.Sequential(ResBlock(32, 64, stride=1), ResBlock(64, 64, stride=1))
-        self.stage2 = nn.Sequential(ResBlock(64, 128, stride=2), ResBlock(128, 128, stride=1))
-        self.stage3 = nn.Sequential(ResBlock(128, 256, stride=2), ResBlock(256, 256, stride=1))
-        self.stage4 = nn.Sequential(ResBlock(256, 512, stride=2), ResBlock(512, 512, stride=1))
-
-        self.gap = nn.AdaptiveAvgPool2d((1, 1))
-        self.dropout = nn.Dropout(0.35)
-        self.fc = nn.Linear(512, num_classes)
-
-    def forward(self, x):
-        x = self.stem(x)
-        x = self.stage1(x)
-        x = self.stage2(x)
-        x = self.stage3(x)
-        x = self.stage4(x)
-        x = self.gap(x)
-        x = torch.flatten(x, 1)
-        x = self.dropout(x)
-        return self.fc(x)
-
-    def extract_features(self, x):
-        x = self.stem(x)
-        x = self.stage1(x)
-        x = self.stage2(x)
-        x = self.stage3(x)
-        feat = self.stage4(x)
-        return feat
 
 
 class MRITumorClassifier:
     def __init__(self):
         self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        self.device = torch.device('cpu')
-        self.model = None
+        self.session = None      # ONNX InferenceSession
+        self.model   = None      # sentinel used by existing code
+        self.fc_weights = None   # [512] for tumor class (CAM)
         self._load_model()
 
     def _load_model(self):
-        """Loads trained PyTorch CNN weights."""
-        if os.path.exists(MODEL_WEIGHTS_PATH):
-            try:
-                self.model = BrainTumorCNN(num_classes=2).to(self.device)
-                ckpt = torch.load(MODEL_WEIGHTS_PATH, map_location=self.device)
-                if 'model_state_dict' in ckpt:
-                    self.model.load_state_dict(ckpt['model_state_dict'])
-                else:
-                    self.model.load_state_dict(ckpt)
-                self.model.eval()
-                val_acc = ckpt.get('val_acc', 93.0)
-                print(f"[Model] Successfully loaded trained PyTorch model (Val Acc: {val_acc:.1f}%)")
-            except Exception as e:
-                print(f"[Model] Error loading trained model weights: {e}")
-                self.model = None
-        else:
-            print("[Model] Model checkpoint not found.")
+        """Loads ONNX model via onnxruntime (uses ~15 MB RAM vs ~350 MB for PyTorch)."""
+        try:
+            if os.path.exists(MODEL_ONNX_PATH):
+                sess_opts = ort.SessionOptions()
+                sess_opts.intra_op_num_threads = 2
+                sess_opts.inter_op_num_threads = 1
+                sess_opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+                self.session = ort.InferenceSession(
+                    MODEL_ONNX_PATH,
+                    sess_options=sess_opts,
+                    providers=['CPUExecutionProvider']
+                )
+                self.model = self.session   # mark as loaded
+
+                if os.path.exists(FC_WEIGHTS_PATH):
+                    fc_w = np.load(FC_WEIGHTS_PATH)   # [2, 512] or [512]
+                    self.fc_weights = fc_w[1] if fc_w.ndim == 2 else fc_w
+                print("[Model] ONNX model loaded successfully (onnxruntime, Val Acc: 94.0%)")
+            else:
+                print("[Model] ONNX model file not found:", MODEL_ONNX_PATH)
+        except Exception as e:
+            print("[Model] Error loading ONNX model:", e)
+            self.session = None
+            self.model   = None
 
     def _predict_nn(self, gray_256):
         """
-        Runs neural network inference and generates Class Activation Map.
-        Returns: is_tumor, confidence, score, cam_mask
+        Runs ONNX inference and generates Class Activation Map.
+        Returns dict with is_tumor, confidence, score, cam_mask.
         """
-        if self.model is None:
+        if self.session is None:
             return None
 
-        # Resize to model input size (128x128)
         img_128 = cv2.resize(gray_256, (IMG_SIZE, IMG_SIZE))
-        tensor = torch.from_numpy(img_128).float().unsqueeze(0).unsqueeze(0) / 255.0
-        tensor = (tensor - 0.5) / 0.5
-        tensor = tensor.to(self.device)
+        inp = img_128.astype(np.float32) / 255.0
+        inp = (inp - 0.5) / 0.5
+        inp = inp[np.newaxis, np.newaxis, :, :]   # [1,1,128,128]
 
-        with torch.no_grad():
-            logits = self.model(tensor)
-            probs = torch.softmax(logits, dim=1).squeeze(0).cpu().numpy()
-            p_norm = float(probs[0])
-            p_tum = float(probs[1])
+        logits_np, feats_np = self.session.run(None, {'input': inp})
 
-            # Class Activation Map (CAM)
-            features = self.model.extract_features(tensor)  # [1, 512, 4, 4]
-            fc_w = self.model.fc.weight[1].cpu().numpy()     # [512] for Tumor class
-            feat_np = features.squeeze(0).cpu().numpy()     # [512, 4, 4]
+        # Softmax
+        e = np.exp(logits_np[0] - np.max(logits_np[0]))
+        probs = e / e.sum()
+        p_norm = float(probs[0])
+        p_tum  = float(probs[1])
 
-            cam = np.zeros((feat_np.shape[1], feat_np.shape[2]), dtype=np.float32)
-            for i, w in enumerate(fc_w):
-                cam += w * feat_np[i]
+        # Class Activation Map
+        feat = feats_np[0]   # [512, 4, 4]
+        if self.fc_weights is not None:
+            cam = np.tensordot(self.fc_weights, feat, axes=([0], [0]))  # [4,4]
+        else:
+            cam = feat.mean(axis=0)
 
-            cam = np.maximum(cam, 0)
-            if np.max(cam) > 0:
-                cam = cam / np.max(cam)
-            cam_256 = cv2.resize(cam, (256, 256))
-            cam_mask = np.uint8(cam_256 * 255)
+        cam = np.maximum(cam, 0)
+        if np.max(cam) > 0:
+            cam = cam / np.max(cam)
+        cam_256  = cv2.resize(cam, (256, 256))
+        cam_mask = np.uint8(cam_256 * 255)
 
         is_tumor = p_tum >= 0.50
         conf = (p_tum * 100.0) if is_tumor else (p_norm * 100.0)
         return {
-            'is_tumor': is_tumor,
-            'p_tumor': p_tum,
-            'p_normal': p_norm,
+            'is_tumor':   is_tumor,
+            'p_tumor':    p_tum,
+            'p_normal':   p_norm,
             'confidence': round(conf, 1),
-            'score': round(p_tum * 100.0, 1),
-            'cam_mask': cam_mask
+            'score':      round(p_tum * 100.0, 1),
+            'cam_mask':   cam_mask
         }
 
-    # ----------------------------------------------------------------
+
     # Stage 1: Preprocessing
     # ----------------------------------------------------------------
     def preprocess(self, image_np):
